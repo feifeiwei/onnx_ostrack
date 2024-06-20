@@ -124,6 +124,20 @@ vector<int> clip_box(vector<int>& box, int H, int W, int margin) {
     // Implement clip_box function logic here
 }
 
+
+void printMat(const cv::Mat& mat) {
+    for (int c = 0; c < mat.size[1]; ++c) {
+        for (int h = 0; h < mat.size[2]; ++h) {
+            for (int w = 0; w < mat.size[3]; ++w) {
+                float value = mat.ptr<float>(0, c)[h * mat.size[3] + w];
+                std::cout << "z_template_out[" << c << "][" << h << "][" << w << "] = " << value << std::endl;
+            }
+        }
+    }
+}
+
+
+
 int main() {
     string videofilepath = "../bag.avi";
 
@@ -142,6 +156,12 @@ int main() {
     const int search_size = 256;
 
     cv::Rect init_box = {316, 138, 110, 118};
+
+    const float MEAN[3] = {0.485,0.456,0.406};
+    const float STD[3] = {0.229,0.224,0.225};
+
+    // const float MEAN[3] = {0.,0.,0.};
+    // const float STD[3] = {1.,1.,1.};
 
 
     VideoCapture cap(videofilepath);
@@ -222,6 +242,14 @@ int main() {
     channels[1].convertTo(c1, CV_32F, 1 / 255.f);
     channels[2].convertTo(c0, CV_32F, 1 / 255.f);
 
+    // 每个通道减去均值并除以方差
+    c0 = (c0 - MEAN[0]) / STD[0];
+    c1 = (c1 - MEAN[1]) / STD[1];
+    c2 = (c2 - MEAN[2]) / STD[2];
+    // printMat(z_template_out);
+    // exit(0);
+
+
     // if (z_template.type() != CV_32F) {
     //     z_template.convertTo(z_template, CV_32F, 1.0 / 255.0); // 先进行归一化，除以255
     // }
@@ -263,6 +291,10 @@ int main() {
         channels[0].convertTo(c2, CV_32F, 1 / 255.f);
         channels[1].convertTo(c1, CV_32F, 1 / 255.f);
         channels[2].convertTo(c0, CV_32F, 1 / 255.f);
+
+        c0 = (c0 - MEAN[0]) / STD[0];
+        c1 = (c1 - MEAN[1]) / STD[1];
+        c2 = (c2 - MEAN[2]) / STD[2];
 
         float* xInput = reinterpret_cast<float*>(x_search_out.data);
 
