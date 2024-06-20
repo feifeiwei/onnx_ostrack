@@ -220,6 +220,9 @@ int main() {
     // std::cout << z_template << std::endl;
     float* zInput = reinterpret_cast<float*>(z_template_out.data);
 
+    float* d_zInput, * d_xInput;
+    float* d_scoreMap, * d_sizeMap, * d_offsetMap;
+
     while (true) {
 
         cap.read(frame);
@@ -255,7 +258,7 @@ int main() {
 
 
          // // Allocate GPU memory
-        float* d_zInput, * d_xInput;
+        
         cudaMalloc((void**)&d_zInput, batchSize * zWidth * zHeight * 3 * sizeof(float));
         cudaMalloc((void**)&d_xInput, batchSize * xWidth * xHeight * 3 * sizeof(float));
 
@@ -264,8 +267,6 @@ int main() {
         cudaMemcpy(d_xInput, xInput, batchSize * xWidth * xHeight * 3 * sizeof(float), cudaMemcpyHostToDevice);
 
         // Allocate GPU memory for outputs
-        float* d_scoreMap, * d_sizeMap, * d_offsetMap;
-
         cudaMalloc((void**)&d_scoreMap, batchSize * scoreMapSize * sizeof(float));
         cudaMalloc((void**)&d_sizeMap, batchSize * sizeMapSize * sizeof(float));
         cudaMalloc((void**)&d_offsetMap, batchSize * offsetMapSize * sizeof(float));
@@ -407,11 +408,11 @@ int main() {
     // delete[] sizeMapOutput;
     // delete[] offsetMapOutput;
 
-    // cudaFree(d_zInput);
-    // cudaFree(d_xInput);
-    // cudaFree(d_scoreMap);
-    // cudaFree(d_sizeMap);
-    // cudaFree(d_offsetMap);
+    cudaFree(d_zInput);
+    cudaFree(d_xInput);
+    cudaFree(d_scoreMap);
+    cudaFree(d_sizeMap);
+    cudaFree(d_offsetMap);
 
     context->destroy();
     engine->destroy();
