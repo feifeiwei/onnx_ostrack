@@ -126,7 +126,8 @@ vector<int> clip_box(vector<int>& box, int H, int W, int margin) {
 
 int main() {
     string videofilepath = "../bag.avi";
-    string model_path = "sim_cnn_track.onnx";
+
+    std::string engineFile = "../sim_os_track_fp32.engine";
 
     // parameters
     const int batchSize = 1;
@@ -186,7 +187,7 @@ int main() {
 
 
     // Load TensorRT engine from file
-    std::string engineFile = "../sim_os_track_fp32.engine";
+    
     ICudaEngine* engine = loadEngine(engineFile);
     if (!engine) {
         return -1;
