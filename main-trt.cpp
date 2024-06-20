@@ -8,6 +8,7 @@
 #include <cuda_runtime_api.h>
 
 #include <fstream>
+#include <chrono>
 
 using namespace cv;
 using namespace std;
@@ -98,12 +99,12 @@ vector<float> cal_bbox(Mat& score_map_ctr, Mat& size_map, Mat& offset_map) {
 
 
 
-cv::Rect map_box_back(const cv::Rect& state, const cv::Rect2f& pred_box, const float resize_factor)
+cv::Rect map_box_back(const cv::Rect& state, const cv::Rect2f& pred_box, const float resize_factor, const int search_size)
 {
         int cx_prev = state.x + 0.5 * state.width;
         int cy_prev = state.y + 0.5 * state.height;
 
-        int search_size = 256;
+        // int search_size = 256;
 
         int cx = pred_box.x;
         int cy = pred_box.y;
@@ -127,11 +128,20 @@ int main() {
     string videofilepath = "../bag.avi";
     string model_path = "sim_cnn_track.onnx";
 
-    // vector<int> init_bbox = {316, 138, 110, 118};
-    int feat_sz = 16;
-    int search_size = 256;
+    // parameters
+    const int batchSize = 1;
+    const int zWidth = 128, zHeight = 128;
+    const int xWidth = 256, xHeight = 256;
+    const int feat_size=16;
 
-    int fmp_size = 16;
+    const int template_factor = 2;
+    const int template_size = 128;
+
+    const int search_factor = 4;
+    const int search_size = 256;
+
+    cv::Rect init_box = {316, 138, 110, 118};
+
 
     VideoCapture cap(videofilepath);
     VideoWriter out("output.avi", VideoWriter::fourcc('X', 'V', 'I', 'D'), 20.0, Size(480, 360));
@@ -159,11 +169,11 @@ int main() {
     //     net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
     // }
 
-    cv::Rect init_box = {316, 138, 110, 118};
+    
     cv::Mat z_template, x_search;
 
-    int template_factor = 2;
-    int template_size = 128;
+    
+
 
     float resize_factor = sample_target(frame, z_template, init_box, template_factor, template_size);
 
@@ -186,13 +196,11 @@ int main() {
     IExecutionContext* context = engine->createExecutionContext();
 
     // Allocate GPU buffers for inputs and outputs
-    const int batchSize = 1;
-    const int zWidth = 128, zHeight = 128;
-    const int xWidth = 256, xHeight = 256;
+    
 
-    const int scoreMapSize  = 1*1*16*16; // Size of output for "score_map"
-    const int sizeMapSize   = 1*2*16*16;  // Size of output for "size_map"
-    const int offsetMapSize = 1*2*16*16; // Size of output for "offset_map"
+    const int scoreMapSize  = 1*1*feat_size*feat_size; // Size of output for "score_map"
+    const int sizeMapSize   = 1*2*feat_size*feat_size;  // Size of output for "size_map"
+    const int offsetMapSize = 1*2*feat_size*feat_size; // Size of output for "offset_map"
 
     // float* zInput = new float[zWidth * zHeight * 3];
     // float* xInput = new float[xWidth * xHeight * 3];
@@ -200,14 +208,14 @@ int main() {
     cv::Mat z_template_out;
     cv::Mat x_search_out;
 
-    z_template_out.create({1, 3, (int)128, (int)128}, CV_32F);
+    z_template_out.create({1, 3, (int)zWidth, (int)zWidth}, CV_32F);
 
     std::vector<cv::Mat> channels;
     cv::split(z_template, channels);
 
-    cv::Mat c0((int)128, (int)128, CV_32F, (float*)z_template_out.data);
-    cv::Mat c1((int)128, (int)128, CV_32F, (float*)z_template_out.data + (int)128 * (int)128);
-    cv::Mat c2((int)128, (int)128, CV_32F, (float*)z_template_out.data + (int)128 * (int)128 * 2);
+    cv::Mat c0((int)zWidth, (int)zWidth, CV_32F, (float*)z_template_out.data);
+    cv::Mat c1((int)zWidth, (int)zWidth, CV_32F, (float*)z_template_out.data + (int)zWidth * (int)zWidth);
+    cv::Mat c2((int)zWidth, (int)zWidth, CV_32F, (float*)z_template_out.data + (int)zWidth * (int)zWidth * 2);
 
     channels[0].convertTo(c2, CV_32F, 1 / 255.f);
     channels[1].convertTo(c1, CV_32F, 1 / 255.f);
@@ -231,24 +239,25 @@ int main() {
     //     Mat img_255 = frame.clone();
 
     //     // Sample target patch
-    //     
+    //  
+        auto start = std::chrono::high_resolution_clock::now();
 
     //     // Prepare search patch
     //     sample_target(frame, init_bbox, 4, 256, x_patch_arr, resize_factor, x_amask_arr);
-        float resize_factor = sample_target(frame, x_search, state, 4, 256);
+        float resize_factor = sample_target(frame, x_search, state, search_factor, search_size);
 
         // if (x_search.type() != CV_32F) {
         //     x_search.convertTo(x_search, CV_32F, 1.0 / 255.0); // 先进行归一化，除以255
         // }
 
-        x_search_out.create({1, 3, (int)256, (int)256}, CV_32F);
+        x_search_out.create({1, 3, (int)xWidth, (int)xWidth}, CV_32F);
 
         std::vector<cv::Mat> channels;
         cv::split(x_search, channels);
 
-        cv::Mat c0((int)256, (int)256, CV_32F, (float*)x_search_out.data);
-        cv::Mat c1((int)256, (int)256, CV_32F, (float*)x_search_out.data + (int)256 * (int)256);
-        cv::Mat c2((int)256, (int)256, CV_32F, (float*)x_search_out.data + (int)256 * (int)256 * 2);
+        cv::Mat c0((int)xWidth, (int)xWidth, CV_32F, (float*)x_search_out.data);
+        cv::Mat c1((int)xWidth, (int)xWidth, CV_32F, (float*)x_search_out.data + (int)xWidth * (int)xWidth);
+        cv::Mat c2((int)xWidth, (int)xWidth, CV_32F, (float*)x_search_out.data + (int)xWidth * (int)xWidth * 2);
 
         channels[0].convertTo(c2, CV_32F, 1 / 255.f);
         channels[1].convertTo(c1, CV_32F, 1 / 255.f);
@@ -327,10 +336,10 @@ int main() {
         float x_offset = 0.0;
         float y_offset = 0.0;
 
-        for(int i=0; i <16; i++)
-            for(int j=0; j<16; j++)
+        for(int i=0; i <feat_size; i++)
+            for(int j=0; j<feat_size; j++)
             {
-                 float cur_conf = *(scoreMapOutput + i*16 + j);
+                 float cur_conf = *(scoreMapOutput + i*feat_size + j);
 
                  if (cur_conf > max_conf)
                  {
@@ -343,22 +352,12 @@ int main() {
 
             }
 
-        // idx_x = 7;
-        // idx_y = 7;
 
+        w = *(sizeMapOutput + 0*feat_size*feat_size + idx_y*feat_size + idx_x);
+        h = *(sizeMapOutput + 1*feat_size*feat_size + idx_y*feat_size + idx_x);
 
-
-        // w = *(sizeMapOutput + 0*16*16 + idx_x*16 + idx_y);
-        // h = *(sizeMapOutput + 1*16*16 + idx_x*16 + idx_y);
-
-        // x_offset = *(offsetMapOutput + 0*16*16 + idx_x*16 + idx_y);
-        // y_offset = *(offsetMapOutput + 1*16*16 + idx_x*16 + idx_y);
-
-        w = *(sizeMapOutput + 0*16*16 + idx_y*16 + idx_x);
-        h = *(sizeMapOutput + 1*16*16 + idx_y*16 + idx_x);
-
-        x_offset = *(offsetMapOutput + 0*16*16 + idx_y*16 + idx_x);
-        y_offset = *(offsetMapOutput + 1*16*16 + idx_y*16 + idx_x);
+        x_offset = *(offsetMapOutput + 0*feat_size*feat_size + idx_y*feat_size + idx_x);
+        y_offset = *(offsetMapOutput + 1*feat_size*feat_size + idx_y*feat_size + idx_x);
 
 
         // cout <<"max_conf: " << max_conf << endl;
@@ -370,8 +369,8 @@ int main() {
         // cout <<"y_offset: " << y_offset << endl;
 
 
-        float cx = ((float)idx_x + x_offset) / fmp_size;
-        float cy = ((float)idx_y + y_offset) / fmp_size;
+        float cx = ((float)idx_x + x_offset) / feat_size;
+        float cy = ((float)idx_y + y_offset) / feat_size;
 
 
         pred_bbox.x = cx;
@@ -388,14 +387,19 @@ int main() {
         pred_bbox.height = pred_bbox.height * search_size / resize_factor;
 
         // cout <<"pred_bbox: " << pred_bbox.x <<" " << pred_bbox.y <<" " << pred_bbox.width <<" " <<pred_bbox.height << endl;
-        state = map_box_back(state, pred_bbox, resize_factor);
+        state = map_box_back(state, pred_bbox, resize_factor, search_size);
 
         rectangle(frame, state, Scalar(0, 255, 0), 5);
         // rectangle(frame, Point(state[0], state[1]), Point(state[0] + state[2], state[1] + state[3]), Scalar(0, 255, 0), 5);
         // cv::imwrite("res.jpg", frame);
         // break;
         out.write(frame);
-        std::cout << "\ncounts: " << counts++ << std::endl;
+
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float, std::milli> duration = end - start;
+        // std::cout << "Inference time: " << duration.count() << " ms" << std::endl;
+
+        std::cout << "\ncounts: " << counts++ << ". time: " << duration.count() << " ms"  << std::endl;
 
     }
 
